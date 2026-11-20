@@ -40,8 +40,10 @@ from educore.api.deps import (
 )
 from educore.database.models import UserRole
 from educore.database.repositories import ProjectRepository, UserRepository
+from educore.config import settings
 from educore.services.chat_service import ChatService
 from educore.services.ingestion_service import IngestionService
+from educore.services.student_service import ImageAnalysisProviderError
 from educore.tasks.ingestion_tasks import process_document_task
 
 logger = logging.getLogger(__name__)
@@ -426,7 +428,7 @@ async def teacher_course_materials(
             detail=(
                 "وصل نموذج الذكاء الاصطناعي إلى حد الطلبات الحالي. "
                 "انتظر دقيقة ثم أعد المحاولة، أو اختر نموذجًا بحدود أعلى "
-                "في OPENROUTER_CHAT_MODEL داخل ملف .env."
+                "في GROQ_CHAT_MODEL داخل ملف .env."
             ),
             headers={"Retry-After": "60"},
         ) from exc
@@ -515,12 +517,12 @@ async def generate_student_exam(
             detail=(
                 "وصل نموذج الذكاء الاصطناعي إلى حد الطلبات الحالي. "
                 "انتظر دقيقة ثم أعد المحاولة، أو اختر نموذجًا بحدود أعلى "
-                "في OPENROUTER_CHAT_MODEL داخل ملف .env."
+                "في GROQ_CHAT_MODEL داخل ملف .env."
             ),
             headers={"Retry-After": "60"},
         ) from exc
     except APIError as exc:
-        logger.exception("OpenRouter failed while generating a student exam")
+        logger.exception("Configured LLM provider failed while generating a student exam")
         raise HTTPException(502, "تعذر الاتصال بخدمة إنشاء الامتحان. جرّب مرة أخرى.") from exc
 
 
@@ -535,7 +537,7 @@ async def analyze_student_image(
     try:
         service = get_student_service(session)
         await service.validate_scope(user_id, project_id)
-        image_bytes = await file.read(12 * 1024 * 1024 + 1)
+        image_bytes = await file.read(settings.VISION_MAX_UPLOAD_BYTES + 1)
         return await service.analyze_image(
             user_id=user_id,
             project_id=project_id,
@@ -545,6 +547,8 @@ async def analyze_student_image(
         )
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
+    except ImageAnalysisProviderError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -704,7 +708,7 @@ async def ask_about_image(
         raise HTTPException(400, "Invalid session ID") from exc
 
     try:
-        image_bytes = await file.read(12 * 1024 * 1024 + 1)
+        image_bytes = await file.read(settings.VISION_MAX_UPLOAD_BYTES + 1)
         service = get_chat_service(session)
         return await service.ask_image(
             session_id=parsed_id,
@@ -715,6 +719,8 @@ async def ask_about_image(
         )
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
+    except ImageAnalysisProviderError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except RateLimitError as exc:

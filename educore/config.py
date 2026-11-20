@@ -32,15 +32,28 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_CHAT_MODEL: str = "baidu/ernie-5.5-flash-preview:free"
-    OPENROUTER_VISION_MODEL: str = "nvidia/nemotron-3.5-super-vl:free"
     OPENROUTER_MAX_TOKENS: int = Field(default=60000, gt=0)
     OPENROUTER_TEMPERATURE: float = Field(default=0.3, ge=0, le=2)
-    # OpenRouter's web search server tool is billed separately from free model
-    # inference, so it is opt-in to avoid unexpected charges.
+    # Legacy OpenRouter search flag; text web search is controlled by Groq's
+    # explicit opt-in flag below.
     OPENROUTER_ENABLE_WEB_SEARCH: bool = False
 
+    # Groq provider for LLM generation and built-in browser search.
+    LLM_PROVIDER: str = "groq"
+    GROQ_API_KEY: str = ""
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_CHAT_MODEL: str = "openai/gpt-oss-120b"
+    GROQ_FAST_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_WEB_SEARCH_ENABLED: bool = False
+
+    # Gemini Vision through Google AI Studio.
+    GOOGLE_API_KEY: str = ""
+    GOOGLE_VISION_MODEL: str = "gemini-2.5-flash"
+    VISION_MAX_UPLOAD_BYTES: int = Field(default=12 * 1024 * 1024, gt=0)
+    VISION_MAX_COMPRESSED_BYTES: int = Field(default=8 * 1024 * 1024, gt=0)
+
     # Embeddings
-    EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
+    EMBEDDING_MODEL_NAME: str = "paraphrase-multilingual-MiniLM-L12-v2"
     EMBEDDING_DIMENSIONS: int = Field(default=384, gt=0)
 
     # RAG Pipeline
@@ -51,11 +64,12 @@ class Settings(BaseSettings):
     # OCR for scanned or image-only PDFs (Tesseract language packs are installed separately).
     OCR_LANGUAGES: str = "eng+ara"
     OCR_DPI: int = Field(default=250, gt=0)
+    OCR_MAX_PAGES: int = Field(default=20, ge=0)
     TESSERACT_CMD: str = ""
     TESSDATA_DIR: str = ""
 
-    RETRIEVAL_TOP_K: int = Field(default=5, gt=0)
-    RETRIEVAL_MIN_SCORE: float = Field(default=0.15, ge=0, le=1)
+    RETRIEVAL_TOP_K: int = Field(default=5, ge=3, le=5)
+    RETRIEVAL_MIN_SCORE: float = Field(default=0.3, ge=0, le=1)
 
     # Celery
     CELERY_BROKER_URL: str = "amqp://guest:guest@localhost:5672//"
@@ -76,6 +90,14 @@ class Settings(BaseSettings):
         path = Path(self.STORAGE_DIR)
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    @property
+    def active_chat_model(self) -> str:
+        return self.GROQ_CHAT_MODEL
+
+    @property
+    def active_web_search_enabled(self) -> bool:
+        return self.GROQ_WEB_SEARCH_ENABLED
 
 
 settings = Settings()

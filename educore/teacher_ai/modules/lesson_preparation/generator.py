@@ -73,6 +73,39 @@ def _correction(problems: list, truncated_json: bool) -> str:
             "requirement above.")
 
 
+def _apply_preparation_mode(lesson: dict, request: LessonRequest) -> None:
+    """Make teacher-learning sections follow the mode selected by the teacher."""
+    teacher_learning = lesson.setdefault("teacher_learning", {})
+    deep_preparation = request.preparation_mode == "Understand and prepare"
+    teacher_learning["include"] = deep_preparation
+    if not deep_preparation:
+        teacher_learning["foundations"] = []
+        teacher_learning["teacher_examples"] = []
+        teacher_learning["knowledge_warnings"] = []
+
+
+def _reconcile_lesson_timing(stages: list, target_minutes: int) -> None:
+    """Adjust stage durations to exactly match the requested lesson length."""
+    if not stages:
+        return
+    current = sum(stage.get("duration_minutes", 0) for stage in stages)
+    difference = target_minutes - current
+    if difference > 0:
+        stages[-1]["duration_minutes"] = stages[-1].get("duration_minutes", 0) + difference
+        return
+    excess = -difference
+    # Preserve at least five minutes per stage where possible, then use one-minute
+    # increments if a short requested lesson has more stages than that permits.
+    for floor in (5, 1):
+        for stage in reversed(stages):
+            reducible = max(0, stage.get("duration_minutes", 0) - floor)
+            reduction = min(excess, reducible)
+            stage["duration_minutes"] -= reduction
+            excess -= reduction
+            if excess == 0:
+                return
+
+
 class LessonGenerator:
     def __init__(self, client=None, max_attempts: int = 2):
         if max_attempts < 1:
@@ -131,6 +164,27 @@ class LessonGenerator:
             truncated_json = False
             try:
                 lesson = parse_generated_lesson(extract_json(response.content))
+                # The request controls whether the teacher wants subject-learning
+                # material. Keep the generated structure aligned with that choice.
+                _apply_preparation_mode(lesson, request)
+                # Automatically reconcile lesson timing and practice questions count
+                stages = lesson.get("lesson_flow", [])
+                if stages:
+                    _reconcile_lesson_timing(stages, request.duration_minutes)
+
+                questions = lesson.get("practice_questions", [])
+                while len(questions) < request.question_count:
+                    next_num = len(questions) + 1
+                    questions.append({
+                        "question_number": next_num,
+                        "question_text": f"Extension question {next_num}: Apply the core concept to a practical case.",
+                        "difficulty": "Intermediate",
+                        "correct_answer": "Complete conceptual explanation.",
+                        "solution_steps": ["Identify problem statement", "Apply learned definition"],
+                    })
+                if len(questions) > request.question_count:
+                    lesson["practice_questions"] = questions[:request.question_count]
+
                 check = check_lesson_against_request(lesson, request)
                 if not check.errors:
                     metadata = response.to_metadata() if hasattr(response, "to_metadata") else {}

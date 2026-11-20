@@ -67,7 +67,7 @@ class TeacherWorkspaceService:
             project_id,
             query=query,
             top_k=max(4, min(int(top_k), 12)),
-            min_score=min(settings.RETRIEVAL_MIN_SCORE, 0.12),
+            min_score=settings.RETRIEVAL_MIN_SCORE,
             document_id=document_id,
         )
 

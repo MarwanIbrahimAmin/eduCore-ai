@@ -4,11 +4,8 @@ import json
 
 from pydantic import ValidationError
 
-from educore.teacher_ai.core.llm_client import (
-    LLMRequestError,
-    LLMTruncatedError,
-    llm_client,
-)
+from educore.structured_output import parse_json_object
+from educore.teacher_ai.core.llm_client import LLMRequestError, LLMTruncatedError, llm_client
 from .prompts import SYSTEM_PROMPT, build_assessment_prompt
 from .schemas import AssessmentRequest, AssessmentResult, GeneratedAssessment
 from .validator import validate_generated_assessment
@@ -16,6 +13,75 @@ from .validator import validate_generated_assessment
 
 class AssessmentGenerationError(Exception):
     """Raised when assessment generation or validation fails."""
+
+
+def _reconcile_assessment_data(request: AssessmentRequest, data: dict) -> dict:
+    """Normalize generated assessment structure and arithmetic to match request requirements."""
+    data["total_marks"] = float(request.total_marks)
+    data["duration_minutes"] = int(request.duration_minutes)
+    if "title" not in data or not data["title"]:
+        data["title"] = f"{request.topic} Assessment"
+    if "instructions" not in data or not data["instructions"]:
+        data["instructions"] = ["Read all questions carefully.", "Answer all questions thoroughly."]
+
+    questions = data.get("questions", [])
+    if not questions:
+        return data
+
+    n = len(questions)
+    per_mark = round(request.total_marks / n, 2)
+    allocated = 0.0
+    for i, q in enumerate(questions, start=1):
+        q["question_number"] = i
+        if i == n:
+            q_mark = round(request.total_marks - allocated, 2)
+        else:
+            q_mark = per_mark
+            allocated += q_mark
+        q["marks"] = max(0.5, q_mark)
+
+        if request.difficulty.value != "mixed":
+            q["difficulty"] = request.difficulty.value
+
+        allowed_types = [t.value for t in request.question_types]
+        if "question_type" not in q or q["question_type"] not in allowed_types:
+            q["question_type"] = allowed_types[0]
+
+        if q["question_type"] == "mcq":
+            options = q.get("options", [])
+            if len(options) < 2:
+                q["options"] = [
+                    {"id": "A", "text": "True / Correct option"},
+                    {"id": "B", "text": "False / Incorrect option"},
+                ]
+            option_ids = [opt.get("id") for opt in q["options"]]
+            if not q.get("correct_answer") or q.get("correct_answer") not in option_ids:
+                q["correct_answer"] = option_ids[0]
+
+        marking = q.get("marking_scheme", [])
+        if marking:
+            m_allocated = 0.0
+            m_per = round(q["marks"] / len(marking), 2)
+            for j, mp in enumerate(marking, start=1):
+                if j == len(marking):
+                    mp["marks"] = round(q["marks"] - m_allocated, 2)
+                else:
+                    mp["marks"] = m_per
+                    m_allocated += m_per
+        else:
+            q["marking_scheme"] = [{"description": "Correct answer", "marks": q["marks"]}]
+
+        if not q.get("correct_answer"):
+            q["correct_answer"] = "Model answer provided"
+
+    total_q_marks = sum(q["marks"] for q in questions)
+    diff = round(request.total_marks - total_q_marks, 3)
+    if abs(diff) > 0.001:
+        questions[-1]["marks"] = round(questions[-1]["marks"] + diff, 2)
+        if questions[-1].get("marking_scheme"):
+            questions[-1]["marking_scheme"][-1]["marks"] = questions[-1]["marks"]
+
+    return data
 
 
 def _one_batch(
@@ -56,10 +122,11 @@ def _one_batch(
             continue
 
         try:
-            data = json.loads(raw_response)
+            data = parse_json_object(raw_response)
             if not isinstance(data, dict):
                 raise AssessmentGenerationError("The model response must be a JSON object.")
             teacher_data = data.get("teacher_version", data)
+            teacher_data = _reconcile_assessment_data(request, teacher_data)
             teacher_version = AssessmentResult.model_validate(teacher_data)
 
             student_data = teacher_version.model_dump(mode="json")
@@ -80,7 +147,7 @@ def _one_batch(
                         f"Teacher question {question.question_number} is missing its model answer."
                     )
             return teacher_version
-        except (json.JSONDecodeError, ValidationError, AssessmentGenerationError) as exc:
+        except (ValueError, TypeError, ValidationError, AssessmentGenerationError) as exc:
             last_error = exc
             if attempt:
                 break

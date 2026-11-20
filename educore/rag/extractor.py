@@ -74,14 +74,16 @@ class DocumentExtractor:
 
         pages = []
         ocr_config = None
+        ocr_pages_processed = 0
         with pymupdf.open(file_path) as doc:
             for page_num, page in enumerate(doc, start=1):
                 text = page.get_text("text")
                 has_text = bool(text.strip())
 
-                # Image-only scans have no text layer. Also OCR image-heavy pages
-                # with only a small text layer so labels inside figures are kept.
-                if not has_text or (len(text.strip()) < 40 and page.get_images(full=True)):
+                # OCR only image/scanned pages with no selectable text. The demo cap
+                # limits OCR work, but every page is still checked for a text layer.
+                if not has_text and ocr_pages_processed < settings.OCR_MAX_PAGES:
+                    ocr_pages_processed += 1
                     if ocr_config is None:
                         ocr_config = DocumentExtractor._prepare_ocr(pymupdf)
                     try:
@@ -101,6 +103,14 @@ class DocumentExtractor:
 
                     if len(ocr_text.strip()) > len(text.strip()):
                         text = ocr_text
+                elif not has_text and settings.OCR_MAX_PAGES == 0:
+                    logger.info("OCR is disabled by OCR_MAX_PAGES=0; skipping PDF page %d", page_num)
+                elif not has_text and ocr_pages_processed >= settings.OCR_MAX_PAGES:
+                    logger.info(
+                        "OCR page limit reached (%d); skipping scanned PDF page %d",
+                        settings.OCR_MAX_PAGES,
+                        page_num,
+                    )
 
                 if text.strip():
                     pages.append(ExtractedPage(

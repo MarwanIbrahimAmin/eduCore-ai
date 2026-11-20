@@ -21,7 +21,7 @@ from educore.rag.query_processor import process_query
 
 # Configuration
 
-API_BASE = os.getenv("EDUCORE_API_BASE", "http://127.0.0.1:8001/api")
+API_BASE = os.getenv("EDUCORE_API_BASE", "http://127.0.0.1:8002/api")
 TIMEOUT = httpx.Timeout(30.0, read=120.0)
 
 DEFAULT_USER_EMAIL = "educore@example.com"
@@ -289,7 +289,9 @@ def normalize_chat_answer(
 
 # Automatic default setup
 
-if not st.session_state.user_id or not st.session_state.project_id:
+def ensure_default_user_and_project() -> bool:
+    if st.session_state.user_id and st.session_state.project_id:
+        return True
 
     user = api_post(
         "/users",
@@ -300,7 +302,7 @@ if not st.session_state.user_id or not st.session_state.project_id:
         },
     )
 
-    if user:
+    if user and "id" in user:
         st.session_state.user_id = user["id"]
 
         projects = api_get(
@@ -310,7 +312,7 @@ if not st.session_state.user_id or not st.session_state.project_id:
 
         if projects and len(projects) > 0:
             st.session_state.project_id = projects[0]["id"]
-
+            return True
         else:
             new_project = api_post(
                 "/projects",
@@ -321,8 +323,12 @@ if not st.session_state.user_id or not st.session_state.project_id:
                 params={"owner_id": user["id"]},
             )
 
-            if new_project:
+            if new_project and "id" in new_project:
                 st.session_state.project_id = new_project["id"]
+                return True
+    return False
+
+ensure_default_user_and_project()
 
 
 # Sidebar
@@ -632,7 +638,14 @@ with tab_chat:
             if not image_file:
                 st.warning("ارفع صورة الأول.")
             else:
+                if not st.session_state.project_id or not st.session_state.user_id:
+                    ensure_default_user_and_project()
+
                 if not st.session_state.chat_session_id:
+                    if not st.session_state.project_id or not st.session_state.user_id:
+                        st.error("تعذر الاتصال بالسيرفر أو تحميل بيانات المقرر.")
+                        st.stop()
+
                     chat = api_post(
                         "/chat/sessions",
                         {
@@ -685,7 +698,14 @@ with tab_chat:
     if question := st.chat_input(
         "اسأل عن المحاضرات أو مستواك، أو قل: اعملي خطة مذاكرة..."
     ):
+        if not st.session_state.project_id or not st.session_state.user_id:
+            ensure_default_user_and_project()
+
         if not st.session_state.chat_session_id:
+            if not st.session_state.project_id or not st.session_state.user_id:
+                st.error("تعذر الاتصال بالسيرفر أو تحميل بيانات المقرر. يرجى إعادة المحاولة بعد ثوانٍ.")
+                st.stop()
+
             chat = api_post(
                 "/chat/sessions",
                 {

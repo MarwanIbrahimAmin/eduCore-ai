@@ -91,7 +91,7 @@ def request_form(rag_topic: str = "", source_file: str = ""):
         c3, c4, c5 = st.columns(3)
         language = c3.selectbox("Lesson language", ["English", "Arabic", "Egyptian Arabic"])
         duration = c4.number_input("Duration (minutes)", min_value=15, max_value=180, value=45, step=5)
-        questions = c5.number_input("Practice questions", min_value=1, max_value=20, value=5, step=1)
+        questions = c5.number_input("Practice questions", min_value=1, max_value=20, value=3, step=1)
         c6, c7 = st.columns(2)
         level = c6.selectbox("Student level", ["Mixed", "Beginner", "Intermediate", "Advanced"])
         style = c7.selectbox("Teaching style", ["Interactive", "Visual", "Practical", "Traditional", "Mixed"])
@@ -256,7 +256,7 @@ def render_lesson_page(
     st.info(f"Lesson topic: **{selected_topic}** · RAG source: **{source_file}**")
 
     if not config.OPENROUTER_API_KEY:
-        st.warning("No API key is configured. Add OPENROUTER_API_KEY to EduCore's .env file and restart the app.")
+        st.warning(f"No API key is configured. Add {config.settings.LLM_PROVIDER.upper()}_API_KEY to EduCore's .env file and restart the app.")
 
     request = request_form(rag_topic=selected_topic, source_file=source_file)
     if request is not None:
