@@ -140,7 +140,7 @@ def test_embedding() -> None:
 
 
 def test_gemini_image() -> None:
-    model = os.getenv("GOOGLE_VISION_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GOOGLE_VISION_MODEL", "gemini-flash-latest")
     try:
         from PIL import Image
         import io
@@ -159,8 +159,9 @@ def test_gemini_image() -> None:
             config=types.GenerateContentConfig(max_output_tokens=20, temperature=0.0),
         )
         lat = (time.perf_counter() - start) * 1000
-        log("Gemini image model", "PASS", f"Answer: {resp.text}", lat,
-            {"model": model, "answer": resp.text})
+        text = (getattr(resp, "text", None) or "").strip()
+        log("Gemini image model", "PASS", f"Answer: {text}", lat,
+            {"model": model, "answer": text})
     except Exception as e:
         log("Gemini image model", "FAIL", f"{type(e).__name__}: {e}")
 

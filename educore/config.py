@@ -48,7 +48,7 @@ class Settings(BaseSettings):
 
     # Gemini Vision through Google AI Studio.
     GOOGLE_API_KEY: str = ""
-    GOOGLE_VISION_MODEL: str = "gemini-2.5-flash"
+    GOOGLE_VISION_MODEL: str = "gemini-flash-latest"
     VISION_MAX_UPLOAD_BYTES: int = Field(default=12 * 1024 * 1024, gt=0)
     VISION_MAX_COMPRESSED_BYTES: int = Field(default=8 * 1024 * 1024, gt=0)
 

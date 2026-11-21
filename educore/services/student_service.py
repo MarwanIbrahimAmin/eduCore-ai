@@ -307,29 +307,29 @@ class StudentLearningService:
 
             def add_candidate(raw_line: str, *, arabic_heading: bool = False) -> bool:
                 line = raw_line.replace("\u200e", " ").replace("\u200f", " ").strip()
+                # Normalize common separators and trim surrounding punctuation
+                line = line.replace(":", " - ").replace("：", " - ")
                 line = re.sub(r"^[\W\d_]+|[\W\d_]+$", "", line, flags=re.UNICODE)
                 line = re.sub(r"\s+", " ", line).strip()
-                if not 7 <= len(line) <= 72:
+                if not 5 <= len(line) <= 140:
                     return False
                 words = line.split()
-                if not 2 <= len(words) <= 6:
+                if not 2 <= len(words) <= 20:
                     return False
                 if any(marker in line.upper() for marker in generic_headings):
                     return False
                 if arabic_heading:
-                    # Arabic page titles are short and clean; rejecting mixed
-                    # scripts and sentence punctuation avoids OCR body-text noise.
-                    if re.search(r"[A-Za-z.,:;!?،؛؟(){}\[\]/&<>]", raw_line):
+                    if len(line) > 140:
                         return False
-                    if len(re.findall(r"[\u0600-\u06ff]", line)) < 8:
-                        return False
-                    if any(word in filler_words or len(word) < 3 for word in words):
+                    if len(re.findall(r"[\u0600-\u06ff]", line)) < 4:
                         return False
                     if any(marker in line for marker in generic_arabic):
                         return False
+                    # Avoid very sentence-like long bodies: allow but be looser
                 else:
                     letters = re.findall(r"[A-Za-z]", line)
-                    if len(letters) < 5 or not all(char.isupper() for char in letters):
+                    # Accept titlecase/allcaps/normal headings too (not only ALLCAPS)
+                    if len(letters) < 4:
                         return False
                 if line.casefold() not in seen:
                     seen.add(line.casefold())
@@ -340,16 +340,22 @@ class StudentLearningService:
             # Page titles are usually at the start of the first chunk for a page.
             for block in first_chunk_by_page.values():
                 lines = [line.strip() for line in str(block["content"]).splitlines() if line.strip()]
-                for line in lines[:3]:
+                for line in lines[:4]:
                     if add_candidate(line, arabic_heading=True):
                         break
 
             # OCR/layout extraction also yields clean uppercase English headings.
             for block in blocks:
                 for line in str(block["content"]).splitlines():
-                    add_candidate(line)
+                    add_candidate(line, arabic_heading=True)
+                    add_candidate(line, arabic_heading=False)
 
             for name in candidates:
+                # Skip noisy body-like fragments
+                if " - " in name and len(name) > 90:
+                    continue
+                if name.count(" ") > 14:
+                    continue
                 topics.append({
                     "name": name[:100],
                     "skill_group": "موضوعات الملف",
