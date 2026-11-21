@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_CHAT_MODEL: str = "baidu/ernie-5.5-flash-preview:free"
     OPENROUTER_MAX_TOKENS: int = Field(default=60000, gt=0)
-    OPENROUTER_TEMPERATURE: float = Field(default=0.3, ge=0, le=2)
+    OPENROUTER_TEMPERATURE: float = Field(default=0.15, ge=0, le=2)
     # Legacy OpenRouter search flag; text web search is controlled by Groq's
     # explicit opt-in flag below.
     OPENROUTER_ENABLE_WEB_SEARCH: bool = False
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     VISION_MAX_COMPRESSED_BYTES: int = Field(default=8 * 1024 * 1024, gt=0)
 
     # Embeddings
-    EMBEDDING_MODEL_NAME: str = "paraphrase-multilingual-MiniLM-L12-v2"
+    EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
     EMBEDDING_DIMENSIONS: int = Field(default=384, gt=0)
 
     # RAG Pipeline

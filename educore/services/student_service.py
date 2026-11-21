@@ -219,7 +219,7 @@ class StudentLearningService:
                         },
                     ],
                     temperature=0.1,
-                    max_tokens=600,
+                    max_tokens=1200,
                 )
                 payload = validate_json_object(raw, CourseTopicsOutput)
                 raw_topics = payload.topics
@@ -257,18 +257,6 @@ class StudentLearningService:
         # selector usable by deriving headings from the indexed source text.
         if not topics and source_blocks:
             topics = self._fallback_course_topics(documents, source_blocks)
-
-        # Supplement model-discovered concepts with clear headings read directly
-        # from this file, so a short model response does not hide its other units.
-        heading_topics = self._fallback_course_topics(documents, source_blocks) if source_blocks else []
-        known_topic_names = {item["name"].casefold() for item in topics}
-        for item in heading_topics:
-            if item["name"].casefold() in known_topic_names:
-                continue
-            topics.append(item)
-            known_topic_names.add(item["name"].casefold())
-            if len(topics) >= 12:
-                break
 
         # Keep successful results until the indexed-file signature changes.
         # Cache an empty fallback briefly so rerendering the page does not
@@ -830,7 +818,7 @@ class StudentLearningService:
             try:
                 raw = await generator.generate(
                     generation_messages,
-                    max_tokens=700,
+                    max_tokens=1600,
                     temperature=0.2 if attempt_number == 0 else 0.1,
                 )
                 generated = validate_json_object(raw, StudyPlanOutput).model_dump(mode="python")
@@ -1047,9 +1035,11 @@ Keep each explanation concise (one or two sentences). Escape quotation marks and
                     max_tokens=min(8192, max(2048, 500 * question_count + 500)),
                     response_format=response_format,
                 )
-                generated = validate_json_object(raw, StudentExamOutput).model_dump(mode="python")
+                logger.debug("Exam generator raw response: %s", raw[:500])
+                payload = validate_json_object(raw, StudentExamOutput)
+                generated = payload.model_dump(mode="python")
                 internal_questions = self._validate_generated_questions(
-                    generated.get("questions"),
+                    [item.model_dump(mode="python") for item in payload.questions],
                     topic,
                     difficulty,
                     question_count,
@@ -1084,7 +1074,7 @@ Keep each explanation concise (one or two sentences). Escape quotation marks and
                     },
                 ]
             except ValueError as exc:
-                logger.warning(
+                logger.exception(
                     "Exam generation attempt %s returned invalid output: %s",
                     attempt_number + 1,
                     exc,
@@ -1832,7 +1822,10 @@ Keep each explanation concise (one or two sentences). Escape quotation marks and
             if question_topic not in allowed_topics:
                 question_topic = topic
             question_difficulty = item.get("difficulty")
-            if question_difficulty not in {"Easy", "Medium", "Hard"}:
+            valid_difficulties = {"Easy", "Medium", "Hard"}
+            if difficulty == "Mixed":
+                valid_difficulties.add("Mixed")
+            if question_difficulty not in valid_difficulties:
                 question_difficulty = "Medium" if difficulty == "Mixed" else difficulty
             valid.append({
                 "question_id": str(uuid.uuid4()),

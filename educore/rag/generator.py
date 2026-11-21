@@ -103,11 +103,6 @@ class OpenRouterGenerator:
                     "temperature": self._temperature(temperature),
                     "stream": False,
                 }
-                if settings.LLM_PROVIDER.strip().lower() == "groq":
-                    # GPT-OSS may spend much of a small completion budget on
-                    # reasoning. Keep short utility calls (query rewriting,
-                    # evidence support) predictable and return visible text.
-                    request["reasoning_effort"] = _groq_reasoning_effort(reasoning_effort, self.reasoning_effort)
                 if response_format is not None:
                     request["response_format"] = response_format
                 response = await self.client.chat.completions.create(**request)
@@ -168,7 +163,6 @@ class OpenRouterGenerator:
                     ),
                     temperature=0.2,
                     tools=[{"type": "browser_search"}],
-                    **({"reasoning_effort": "low"} if settings.LLM_PROVIDER.strip().lower() == "groq" else {}),
                 )
                 if not response.choices:
                     raise RuntimeError("Groq web search returned no completion choices")

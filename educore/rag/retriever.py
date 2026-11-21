@@ -76,7 +76,7 @@ class Retriever:
         if top_k <= 0:
             logger.warning("Invalid top_k value: %s", top_k)
             return []
-        top_k = max(3, min(int(top_k), 5))
+        top_k = max(1, int(top_k))
 
         if not 0 <= min_score <= 1:
             raise ValueError("min_score must be between 0 and 1")

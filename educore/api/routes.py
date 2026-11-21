@@ -257,6 +257,7 @@ async def delete_project(
 @router.post("/documents/upload", status_code=201)
 async def upload_document(
     project_id: str = Query(..., description="UUID of the project"),
+    user_id: str = Query(..., description="UUID of the user"),
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
 ):
@@ -266,6 +267,10 @@ async def upload_document(
         parsed_project_id = uuid.UUID(project_id)
     except ValueError:
         raise HTTPException(400, "Invalid project ID")
+    try:
+        parsed_user_id = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid user ID")
 
     service = get_ingestion_service(session)
 
@@ -274,6 +279,7 @@ async def upload_document(
 
         doc = await service.upload_document(
             project_id=parsed_project_id,
+            user_id=parsed_user_id,
             filename=file.filename or "unnamed",
             file_content=content,
         )
@@ -335,6 +341,7 @@ async def document_status(
 @router.delete("/documents/{document_id}")
 async def delete_document(
     document_id: str,
+    user_id: str = Query(..., description="UUID of the user"),
     session: AsyncSession = Depends(get_session),
 ):
     """Delete one document and its associated chunks."""
@@ -343,11 +350,15 @@ async def delete_document(
         parsed_id = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(400, "Invalid document ID")
+    try:
+        parsed_user_id = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid user ID")
 
     service = get_ingestion_service(session)
 
     try:
-        result = await service.delete_document(parsed_id)
+        result = await service.delete_document(parsed_id, parsed_user_id)
 
         # Commit DB deletion first.
         await session.commit()

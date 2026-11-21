@@ -8,7 +8,7 @@ from educore.rag.validator import extract_sentences
 
 
 class RagPipelineTests(unittest.IsolatedAsyncioTestCase):
-    async def test_groq_generator_applies_supported_reasoning_setting(self):
+    async def test_groq_generator_does_not_send_reasoning_effort(self):
         response = SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content="ready"))],
             usage=SimpleNamespace(total_tokens=4),
@@ -23,13 +23,13 @@ class RagPipelineTests(unittest.IsolatedAsyncioTestCase):
             patch("educore.rag.generator.create_async_client", return_value=client),
         ):
             answer = await OpenRouterGenerator(
-                model_id="openai/gpt-oss-120b", reasoning_effort="low"
+                model_id="groq/llama-3.1-8b-instant", reasoning_effort="medium"
             ).generate([{"role": "user", "content": "Reply ready"}], reasoning_effort="none")
 
         self.assertEqual(answer, "ready")
         request = client.chat.completions.create.await_args.kwargs
-        self.assertEqual(request["reasoning_effort"], "low")
-        self.assertEqual(request["model"], "openai/gpt-oss-120b")
+        self.assertNotIn("reasoning_effort", request)
+        self.assertEqual(request["model"], "groq/llama-3.1-8b-instant")
 
     def test_groq_reasoning_effort_never_sends_unsupported_none(self):
         self.assertEqual(_groq_reasoning_effort("none", "medium"), "low")

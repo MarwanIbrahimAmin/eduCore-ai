@@ -269,7 +269,7 @@ class ChatService:
             project_id=project_id,
             query=question,
             retrieval_query=question,
-            top_k=settings.RETRIEVAL_TOP_K,
+            top_k=100,
             min_score=settings.RETRIEVAL_MIN_SCORE,
             document_id=selected.id,
         )
